@@ -10,6 +10,10 @@ on:
         required: false
         default: false
         type: boolean
+      lfs:
+        required: false
+        default: false
+        type: boolean
     secrets:
       factorio-api-key:
         required: true
@@ -27,6 +31,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 100
           fetch-tags: true
+          lfs: ${{ inputs.lfs }}
 
       - id: mod-name
         name: Get mod name from info.json
