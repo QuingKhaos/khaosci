@@ -25,6 +25,8 @@ jobs:
         with:
           ref: ${{ github.ref }}
           persist-credentials: false
+          fetch-depth: 100
+          fetch-tags: true
 
       - id: mod-name
         name: Get mod name from info.json
@@ -56,22 +58,23 @@ jobs:
           VERSION=${{ steps.mod-version.outputs.mod_version }}
 
           # Extract base release notes and get line numbers
-          awk "/Version: $VERSION/,/^---/" changelog.txt | head -n -1 | tail -n +3 > raw_changelog.tmp
+          awk "/Version: $VERSION/,/^---/" ${{ inputs.mod-folder }}/changelog.txt | head -n -1 | tail -n +3 > ${{ inputs.mod-folder }}/raw_changelog.tmp
 
           # Find the starting line number of this version in the original file
-          VERSION_LINE=$(grep -n "Version: $VERSION" changelog.txt | cut -d: -f1)
+          VERSION_LINE=$(grep -n "Version: $VERSION" ${{ inputs.mod-folder }}/changelog.txt | cut -d: -f1)
           START_LINE=$((VERSION_LINE + 2))  # Skip version line and date line
 
           echo "Version starts at line $START_LINE in changelog.txt"
 
           # Process each line and add PR references using git blame
-          line_num=$START_LINE > release_notes.md
+          line_num=$START_LINE
+          > ${{ inputs.mod-folder }}/release_notes.md
 
           while IFS= read -r line; do
             if [[ $line == "  "[A-Z]*":" ]]; then
               # Category header
               category=$(echo "$line" | sed 's/^  \([A-Z][a-zA-Z]*\):$/### \1/')
-              echo "$category" >> release_notes.md
+              echo "$category" >> ${{ inputs.mod-folder }}/release_notes.md
             elif [[ $line == "    - "* ]]; then
               # Feature line - get ALL PR references that modified this line since last release
               feature_text="${line#    - }"
@@ -82,10 +85,10 @@ jobs:
               # Get all commits that modified this specific line since previous release
               if [ -n "$PREV_TAG" ]; then
                 # Use git log -L to get line history since previous release
-                line_commits=$(git log -L${line_num},${line_num}:changelog.txt --format="%H" ${PREV_TAG}..HEAD 2>/dev/null || echo "")
+                line_commits=$(git log -L${line_num},${line_num}:${{ inputs.mod-folder }}/changelog.txt --format="%H" ${PREV_TAG}..HEAD 2>/dev/null || echo "")
               else
                 # For first release, get complete line history from beginning
-                line_commits=$(git log -L${line_num},${line_num}:changelog.txt --format="%H" 2>/dev/null || echo "")
+                line_commits=$(git log -L${line_num},${line_num}:${{ inputs.mod-folder }}/changelog.txt --format="%H" 2>/dev/null || echo "")
               fi
 
               # Collect all PR references from commits that modified this line
@@ -114,23 +117,23 @@ jobs:
 
               # Format the changelog entry with all PR references
               if [ -n "$pr_refs" ]; then
-                echo "- $feature_text ($pr_refs)" >> release_notes.md
+                echo "- $feature_text ($pr_refs)" >> ${{ inputs.mod-folder }}/release_notes.md
               else
-                echo "- $feature_text" >> release_notes.md
+                echo "- $feature_text" >> ${{ inputs.mod-folder }}/release_notes.md
               fi
             elif [[ -n "$line" ]]; then
               # Other non-empty lines
-              echo "$line" >> release_notes.md
+              echo "$line" >> ${{ inputs.mod-folder }}/release_notes.md
             else
               # Empty lines
-              echo "" >> release_notes.md
+              echo "" >> ${{ inputs.mod-folder }}/release_notes.md
             fi
 
             line_num=$((line_num + 1))
-          done < raw_changelog.tmp
+          done < ${{ inputs.mod-folder }}/raw_changelog.tmp
 
           # Clean up
-          rm -f raw_changelog.tmp
+          rm -f ${{ inputs.mod-folder }}/raw_changelog.tmp
 
           echo "Release notes prepared with git blame PR references"
 
@@ -138,7 +141,7 @@ jobs:
         if: env.ZIP_FILE != ''
         uses: softprops/action-gh-release@v3
         with:
-          body_path: release_notes.md
+          body_path: ${{ inputs.mod-folder }}/release_notes.md
           name: ${{ steps.mod-version.outputs.mod_version }}
           tag_name: v${{ steps.mod-version.outputs.mod_version }}
           target_commitish: ${{ github.ref }}
