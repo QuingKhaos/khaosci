@@ -37,8 +37,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Validate configuration files
-        uses: kehoecj/validate-configs-action@v4
+      - name: Donwload validator
+        run: |
+          curl --location --output validator.tar.gz https://github.com/Boeing/config-file-validator/releases/download/v2.3.0/validator-v2.3-linux-amd64.tar.gz
+          tar -xzf validator.tar.gz validator
+
+      - name: Validate config files
+        run: |
+          ./validator .
 
   luacheck:
     runs-on: ubuntu-latest
