@@ -33,34 +33,17 @@ jobs:
           fetch-tags: true
           lfs: ${{ inputs.lfs }}
 
-      - id: mod-name
-        name: Get mod name from info.json
-        run: echo "mod_name=$(jq -r '.name' ${{ inputs.mod-folder }}/info.json)" >> $GITHUB_OUTPUT
-
-      - id: mod-version
-        name: Get mod version from info.json
-        run: echo "mod_version=$(jq -r '.version' ${{ inputs.mod-folder }}/info.json)" >> $GITHUB_OUTPUT
-
-      - id: mod-exists
-        name: Check if mod version already exists on mod portal
-        run: response=$(curl --silent --output /dev/null --write-out "%{http_code}" "https://mods.factorio.com/api/mods/${{ steps.mod-name.outputs.mod_name }}"); echo "response=$response" >> $GITHUB_OUTPUT
-
-      - id: create-mod-package
-        name: Create mod package
+      - name: Validate mod
         uses: TheBrutalX/factorio-mod-uploader-action@v2
         with:
-          action: compress
-          mod-name: ${{ steps.mod-name.outputs.mod_name }}
+          action: validate
           mod-folder: ${{ inputs.mod-folder }}
-          mod-version: ${{ steps.mod-version.outputs.mod_version }}
-          auto-update-version: false
 
       - name: Extract changelog for release notes
+        env:
+          VERSION: ${{ env.MOD_VERSION }}
         run: |
           echo "Extracting release notes from changelog..."
-
-          # Extract the latest version's changes from changelog.txt
-          VERSION=${{ steps.mod-version.outputs.mod_version }}
 
           # Extract base release notes and get line numbers
           awk "/Version: $VERSION/,/^---/" ${{ inputs.mod-folder }}/changelog.txt | head -n -1 | tail -n +3 > ${{ inputs.mod-folder }}/raw_changelog.tmp
@@ -142,27 +125,28 @@ jobs:
 
           echo "Release notes prepared with git blame PR references"
 
+      - name: Create mod package
+        uses: TheBrutalX/factorio-mod-uploader-action@v2
+        with:
+          action: compress
+          auto-update-version: false
+
+      - name: Publish to mod portal
+        uses: TheBrutalX/factorio-mod-uploader-action@v2
+        with:
+          action: upload
+          factorio-api-key: ${{ secrets.factorio-api-key }}
+          skip-update-details: ${{ inputs.skip-update-details }}
+
       - name: Release mod package
         if: env.ZIP_FILE != ''
         uses: softprops/action-gh-release@v3
         with:
           body_path: ${{ inputs.mod-folder }}/release_notes.md
-          name: ${{ steps.mod-version.outputs.mod_version }}
-          tag_name: v${{ steps.mod-version.outputs.mod_version }}
+          name: ${{ env.MOD_VERSION }}
+          tag_name: v${{ env.MOD_VERSION }}
           target_commitish: ${{ github.ref }}
           files: |
             ${{ env.ZIP_FILE }}
           fail_on_unmatched_files: true
           make_latest: true
-
-      - name: Publish to mod portal
-        uses: TheBrutalX/factorio-mod-uploader-action@v2
-        env:
-          PROCESS_CREATE_ON_PORTAL: "${{ steps.mod-exists.outputs.response == 200 && 'false' || 'true' }}"
-        with:
-          action: upload
-          mod-name: ${{ steps.mod-name.outputs.mod_name }}
-          mod-folder: ${{ inputs.mod-folder }}
-          mod-version: ${{ steps.mod-version.outputs.mod_version }}
-          factorio-api-key: ${{ secrets.factorio-api-key }}
-          skip-update-details: ${{ inputs.skip-update-details }}
