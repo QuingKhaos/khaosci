@@ -31,34 +31,14 @@ jobs:
 
   jsonlint:
     runs-on: ubuntu-latest
-    name: JSON Quality
+    name: Config Files Quality (including locales)
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Install linting tools
-        run: |
-          npm install -g jsonlint
-
-      - name: Lint JSON files
-        run: |
-          lint_json() {
-            if [ -f "$1" ]; then
-              echo "Linting $1..."
-              if jsonlint "$1" > /dev/null 2>&1; then
-                echo "$1 passed jsonlint"
-              else
-                echo "$1 failed jsonlint:"
-                jsonlint "$1"
-                return 1
-              fi
-            fi
-          }
-
-          find . -name "*.json" -not -path "./.git/*" | while read -r file; do
-            lint_json "$file"
-          done
+      - name: Validate configuration files
+        uses: kehoecj/validate-configs-action@v4
 
   luacheck:
     runs-on: ubuntu-latest
